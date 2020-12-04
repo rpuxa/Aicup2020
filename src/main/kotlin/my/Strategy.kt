@@ -52,10 +52,12 @@ lateinit var defenceField: IntArray
 lateinit var allEnemiesField: IntArray
 lateinit var myUnitsField: IntArray
 lateinit var buildingIds: IntArray
-lateinit var repairWorkersField: IntArray
-lateinit var repairUnitsField: IntArray
+lateinit var damagedUnitsToWorkersAttractionField: IntArray
+lateinit var notHealedUnitsToWorkersAttractionField: IntArray
+lateinit var workersToNotHealedUnitsAttractionField: IntArray
 lateinit var notHealedEntitiesIds: IntArray
 lateinit var damagedFighterField: IntArray
+lateinit var notHealedFighterField: IntArray
 
 
 lateinit var used: BooleanArray
@@ -77,13 +79,15 @@ lateinit var wholeGraph: Array<Neighbours>
 lateinit var sortedBuildPoints: IntArray
 lateinit var properties: Map<EntityType, EntityProperties>
 
+val coords = IntArray(80 * 80) { it }
+
 private fun strategy() {
     debug {
         text("Workers: ${workers.size}")
         text("Fighters: ${fighters.size}")
         text("Builders: ${workers.values.count { it.buildingPlan != null }}")
         text("Builders projects: ${buildingPlans.size}")
-        //field(afraidField)
+//        field(coords)
     }
     val plannedResources = me.resource - buildingPlans.sumBy {
         if (it.type == EntityType.HOUSE) {
@@ -158,7 +162,7 @@ fun buildTypes(): MutableMap<EntityType, Int> {
     }
 
     fun addFighterUnit() {
-        if (rangedCost / 2.0 > meleeCost) {
+        if (rangedCost / 1.7 > meleeCost) {
             add(EntityType.MELEE_UNIT)
         } else {
             add(EntityType.RANGED_UNIT)
@@ -182,7 +186,7 @@ fun buildTypes(): MutableMap<EntityType, Int> {
         }
         val max = fightersByPlayer.maxOf { it.value.size }
         if (fighters.size < .7 * max) {
-            addWorker()
+            addFighterUnit()
             return@r
         }
         if (workers.size < 15) {
@@ -222,6 +226,10 @@ fun buildTypes(): MutableMap<EntityType, Int> {
             return@r
         }
         if (fighters.size < 1.7 * max) {
+            addFighterUnit()
+            return@r
+        }
+        if (me.resource > 1300) {
             addFighterUnit()
             return@r
         }
@@ -272,10 +280,12 @@ fun init(v: PlayerView, d: DebugInterface?): Action {
         allEnemiesField = IntArray(size)
         myUnitsField = IntArray(size)
         buildingIds = IntArray(size)
-        repairWorkersField = IntArray(size)
-        repairUnitsField = IntArray(size)
+        notHealedUnitsToWorkersAttractionField = IntArray(size)
+        damagedUnitsToWorkersAttractionField = IntArray(size)
+        workersToNotHealedUnitsAttractionField = IntArray(size)
         notHealedEntitiesIds = IntArray(size)
         damagedFighterField = IntArray(size)
+        notHealedFighterField = IntArray(size)
 
 
         used = BooleanArray(size)
@@ -552,190 +562,16 @@ fun init(v: PlayerView, d: DebugInterface?): Action {
 
     }
 
-    //<editor-fold desc="Coeff">
-    val playerStats = fightersByPlayer.map { (id, fighters) ->
-        var totalStrength = 0
-        fighters.forEach { fighter ->
-            val strength = strength(fighters, fighter)
-            if (id == me.id) {
-                my.fighters[fighter.id]!!.strength = strength
-            }
-            for (enemy in enemies) {
-                if (fighter.id == enemy.id) {
-                    enemy.strength = strength
-                    break
-                }
-            }
-            totalStrength += strength
-        }
-        id to totalStrength
-    }.toMap()
-
-    val mine = playerStats[me.id]!!
-    val coeff = playerStats.mapNotNull { (key, stat) ->
-        if (me.id == key) null else {
-            key to mine - stat
-        }
-    }.toMap().toMutableMap()
-    /* run {
-     if (coeff.values.all { it > 10000 }) {
-         val player = enemyByPlayer.entries.find { it.value.isNotEmpty() }?.key ?: return@run
-         coeff.entries.forEach {
-             if (it.key != player)
-                 coeff[it.key] = coeff[it.key]!! / 10
-         }
-     }
- }*/
-    debug {
-        coeff.map { (id, c) ->
-            text("Коеффициент$id: $c")
-        }
-    }
-    //</editor-fold>
-    //<editor-fold desc="Enemy influence field">
-    enemyInfluenceField.clear()
-    coeff.forEach { (id, value) ->
-        queue.clear()
-        tmpField.clear()
-        enemyByPlayer[id]!!.forEach {
-            val i = it.pos.toI()
-            queue.push(i)
-            tmpField[i] = 160
-        }
-        bfs(reachableGraph, queue, tmpField)
-        repeat(size) {
-            val i = tmpField[it].toDouble()
-            enemyInfluenceField[it] -= (ln(161 - i) * value * 10).toInt()
-        }
-    }
-    repeat(size) {
-        val i = max(it % side, it / side)
-        if (i <= 20) {
-            enemyInfluenceField[it] = enemyInfluenceField[it].coerceAtMost(0)
-        }
-    }
-    //</editor-fold>
-    //<editor-fold desc="Attractive field">
-    if (view.currentTick % 2 == 0) {
-        fighterAttractiveField.clear()
-        val depth = when {
-            fighters.size < 30 -> 22
-            fighters.size < 40 -> 19
-            fighters.size < 50 -> 17
-            fighters.size < 70 -> 13
-            fighters.size < 90 -> 11
-            fighters.size < 100 -> 6
-            fighters.size < 110 -> 5
-            else -> 0
-        }
-        if (depth > 2) {
-            tmpDoubleField.clear()
-            fighters.values.forEach { fighter ->
-                queue.clear()
-                tmpField.clear()
-
-                bfs(reachableGraph, queue, fighter.pos.toI(), tmpField, depth)
-                repeat(size) {
-                    var force = tmpField[it].coerceAtMost(depth - 2).toDouble()
-                    force = -ln(depth - 1 - force) * 200
-                    tmpDoubleField[it] += force
-                    if (tmpDoubleField[it] > 10000)
-                        tmpDoubleField[it] = 10000.0
-                }
-            }
-            repeat(size) {
-                val x = tmpDoubleField[it]
-                fighterAttractiveField[it] = x.roundToInt()
-            }
-        }
-    }
-    //</editor-fold>
-    //<editor-fold desc="Building area">
-    queue.clear()
-    tmpField.clear()
-    view.entities.forEach {
-        if (it.playerId == me.id && !it.properties.canMove) {
-            baseCells(it.position, it.properties.size) { x, y ->
-                val i = toI(x, y)
-                tmpField[i] = 20
-                queue.push(i)
-            }
-        }
-    }
-    bfs(reachableGraph, queue, tmpField)
-    repeat(size) {
-        buildingsArea[it] = tmpField[it] > 0
-    }
-    //</editor-fold>
-    //<editor-fold desc="Defence field">
-    defence = false
-    queue.clear()
-    tmpField.clear()
-    enemies.forEach {
-        val i = it.pos.toI()
-        if (buildingsArea[i]) {
-            queue.push(i)
-            tmpField[i] = 160
-            defence = true
-        }
-    }
-    debug {
-        if (defence)
-            text("DEFENCE!")
-    }
-    bfs(reachableGraph, queue, tmpField)
-    repeat(size) {
-        val value = tmpField[it].toDouble()
-        defenceField[it] = -(ln(161 - value) * 30_000 * 10).toInt()
-    }
-    //</editor-fold>
-    //<editor-fold desc="Fighter field">
-    repeat(size) {
-        fighterField[it] =
-                (if (occupied[it]) -100_000_000 else 0) + enemyInfluenceField[it] + fighterAttractiveField[it] + defenceField[it] + buildPlanField[it]
-    }
-    //</editor-fold>
-    //<editor-fold desc="Afraid field">
+    mainCalculations()
     afraid()
-    //</editor-fold>
-
-    notHealedEntitiesIds.clearM1()
-    queue.clear()
-    repairWorkersField.clear()
-    entities.values.forEach { entity ->
-        if (entity.isDamaged && entity.entityType != EntityType.BUILDER_UNIT) {
-            baseNeighbours(entity.position, entity.properties.size) {
-                queue.push(it)
-                repairWorkersField[it] = 3
-                notHealedEntitiesIds[it] = entity.id
-            }
-        }
-    }
-    bfs(notOccupiedGraph, queue, repairWorkersField)
-    repeat(size) {
-        repairWorkersField[it] *= 20
-    }
-
-    repairUnitsField.clear()
-    queue.clear()
-    repeat(size) {
-        if (farmers[it]) {
-            queue.push(it)
-            repairUnitsField[it] = 160
-        }
-    }
-    bfs(notOccupiedGraph, queue, repairUnitsField)
-
-    repeat(size) {
-        damagedFighterField[it] = (if (occupied[it]) -100_000_000 else 0) + defenceField[it] + buildPlanField[it] + repairUnitsField[it]
-    }
+    attraction()
 
     //<editor-fold desc="Farmers field">
     repeat(size) {
-        farmersAndRepairField[it] = resourceField[it] + buildPlanField[it] + repairWorkersField[it]
+        farmersAndRepairField[it] = resourceField[it] + buildPlanField[it] + workersToNotHealedUnitsAttractionField[it]
     }
     //</editor-fold>
-
+    //<editor-fold desc="allEnemiesField">
     allEnemiesField.clear()
     queue.clear()
     enemies.forEach {
@@ -749,7 +585,8 @@ fun init(v: PlayerView, d: DebugInterface?): Action {
             allEnemiesField[it] = 1_000_000
         }
     }
-
+    //</editor-fold>
+    //<editor-fold desc="myUnitsField">
     myUnitsField.clear()
     queue.clear()
     fighters.values.forEach {
@@ -758,6 +595,7 @@ fun init(v: PlayerView, d: DebugInterface?): Action {
         queue.push(i)
     }
     bfs(reachableGraph, queue, myUnitsField)
+    //</editor-fold>
 
     //<editor-fold desc="Return result">
     movableUnits.values.forEach {
@@ -854,7 +692,7 @@ fun actualMovePlace(current: Vec2Int, place: Int): Vec2Int {
 val Entity.isDamaged get() = isDamaged(health, properties.maxHealth)
 val Entity.isHealed get() = isHealed(health, properties.maxHealth, active)
 
-fun isDamaged(health: Int, maxHealth: Int) = health <= maxHealth
+fun isDamaged(health: Int, maxHealth: Int) = health <= maxHealth / 2
 
 fun isHealed(health: Int, maxHealth: Int, active: Boolean) =
         if (active) health >= maxHealth - 4 else health == maxHealth

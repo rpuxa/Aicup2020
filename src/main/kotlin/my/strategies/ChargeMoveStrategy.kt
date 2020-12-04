@@ -26,9 +26,9 @@ class ChargeMoveStrategy(val field: IntArray) : UnitStrategy() {
             var max = get(place) + add
             val x = pos % side
             val y = pos / side
-            for (dx in (x - 1)..(x + 1)) {
+            for (dx in (x - 2)..(x + 2)) {
                 if (dx in 0 until side) {
-                    for (dy in (y - 1)..(y + 1)) {
+                    for (dy in (y - 2)..(y + 2)) {
                         if (dy in 0 until side) {
                             val i = toI(dx, dy)
                             val get = get(i)

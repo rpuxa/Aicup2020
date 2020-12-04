@@ -15,8 +15,13 @@ class FighterMoveStrategy : UnitStrategy() {
     }
 
     fun wannaMove(unit: MovableUnit): Int {
-        val field = if (unit.isDamaged) damagedFighterField else fighterField
-        return path(unit.pos.toI(), ChargeMoveStrategy.chargeMove(field, unit.pos.toI(), 100_000_000))
+        val i = unit.pos.toI()
+        val field = when {
+            unit.isDamaged -> damagedFighterField
+            !unit.isHealed && notHealedFighterField[i] > -100_000_000 -> notHealedFighterField
+            else -> fighterField
+        }
+        return path(i, ChargeMoveStrategy.chargeMove(field, i, 100_000_000))
     }
 
     override fun perform(unit: MovableUnit): UnitAction? {

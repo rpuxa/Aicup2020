@@ -3,6 +3,7 @@ package my.units
 import model.Vec2Int
 import my.actions.NullAction
 import my.isDamaged
+import my.isHealed
 import my.strategies.NullStrategy
 import my.strategies.UnitStrategy
 
@@ -13,6 +14,7 @@ open class MovableUnit(
     val maxHealth: Int
 ) {
     val isDamaged: Boolean get() = isDamaged(health, maxHealth)
+    val isHealed: Boolean get() = isHealed(health, maxHealth, true)
     var currentStrategy: UnitStrategy = NullStrategy
         private set
 

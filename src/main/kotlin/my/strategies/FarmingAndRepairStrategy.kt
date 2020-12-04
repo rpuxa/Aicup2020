@@ -15,6 +15,7 @@ class FarmingAndRepairStrategy : UnitStrategy(0) {
     }
 
     override fun perform(unit: MovableUnit): UnitAction? {
+        var fixId = -1
         var place = unit.pos.toI()
         var max = farmersAndRepairField[place]
         neighbours(place) {
@@ -22,13 +23,15 @@ class FarmingAndRepairStrategy : UnitStrategy(0) {
                 place = it
                 max = farmersAndRepairField[it]
             }
+            if (fixId == -1) {
+                fixId = notHealedEntitiesIds[it]
+            }
+        }
+        if (fixId != -1) {
+            return MyRepairAction(fixId)
         }
         if (isResource[place]) {
             return MyAttackAction(resources[place]!!.id)
-        }
-        val id = notHealedEntitiesIds[place]
-        if (id != -1) {
-            return MyRepairAction(id)
         }
         val vector = place.toVec()
         return MyMoveAction(vector, false)

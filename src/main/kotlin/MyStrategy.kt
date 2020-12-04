@@ -14,6 +14,7 @@ class MyStrategy {
             result = init(playerView, debugInterface)
         }
         println("Average time: ${all.average()}")
+        println("Tick ${playerView.currentTick}")
         return result!!
     }
 

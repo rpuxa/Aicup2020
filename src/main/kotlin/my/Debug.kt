@@ -5,7 +5,7 @@ import model.*
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTime
 
-const val SHOW_DEBUG = true
+const val SHOW_DEBUG = false
 
 
 class MyDebug(val debug: DebugInterface) {
